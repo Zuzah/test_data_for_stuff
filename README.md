@@ -22,10 +22,15 @@ FENERGO_BASE_URL=https://api.can1.fenergox.com
 DATABASE_URL=sqlite:///./reporting_platform.db
 DEFAULT_DELIMITER=,
 DEFAULT_DATE_FORMAT=M/d/yyyy h:mm:ss tt
+
+# Bank Authorization Layer Assignments (Safe here, local only)
+FENERGO_CLIENT_ID=tbd
+FENERGO_CLIENT_SECRET=tbd
+FENERGO_TOKEN_URL=tbd
+FENERGO_SCOPE=12569.fenergo.api.read
 ```
 
 ```python
-#app/core/config.py
 import os
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -35,9 +40,15 @@ class Settings(BaseSettings):
     FENERGO_BASE_URL: str = "https://api.can1.fenergox.com"
     DATABASE_URL: str = "sqlite:///./reporting_platform.db"
     
+    # --- Bank Enterprise Authentication Mapping (No Defaults - Safely Injected) ---
+    FENERGO_CLIENT_ID: str
+    FENERGO_CLIENT_SECRET: str
+    FENERGO_TOKEN_URL: str
+    FENERGO_SCOPE: str
+    
     # Legacy Fallback Configuration Parameters
     DEFAULT_DELIMITER: str = ","
-    DEFAULT_DATE_FORMAT: str = "yyyy-MM-dd HH:mm:ss"
+    DEFAULT_DATE_FORMAT: str = "M/d/yyyy h:mm:ss tt"
     
     # Cross-Platform Path Tracking Helpers
     BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
