@@ -56,6 +56,22 @@ Key Architectural Components
 
 3. app/services/mapping.py (MappingService): The core business engine. It streams large files in low-memory chunks to keep cloud footprints small, strips dirty whitespace, standardizes datetimes to match reporting export constraints, and applies explicit field quoting rules.
 
+
+## How to Find/Verify API Credentials inside the Fenergo UI Platform
+If the authentication script continues to encounter an error, your local developer keys may have expired or need to be whitelisted for the correct reporting API scopes. Follow these steps within the Fenergo platform to verify or generate a clean pair:
+
+Log In to Your Tenant Portal: Navigate to your environment portal (e.g., your bank's Fenergo SaaS gateway landing page) using your corporate credentials.
+
+Access Admin Configuration Settings: Locate the gear icon on the top right header pane or navigation panel and select Setup / Administration Console.
+
+Navigate to Identity & Access Management (IAM): In the left navigation menu layout pane, look under security groupings or integration layers and open Auth Providers / API Credentials / Connected Apps.
+
+Locate or Create Your Client Credentials Entry: Find the service account identifier mapping to your reporting utility team (e.g., gco-reporting-platform). If none exists, click Create New Client Credentials.
+
+Verify Allowed Permissions Scopes: Ensure your client registration profile has the explicit permission scope checked: fenergo.api.read or advanced_reporting.read. If this scope is missing from the client registration, the auth server will return an error when you try to connect.
+
+Regenerate & Update .env: Copy the active Client ID and click Regenerate Secret to capture the text token. Open your local uncommitted .env configuration file immediately and paste the keys in place.
+
 ```bash
 
 
