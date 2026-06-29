@@ -1,7 +1,64 @@
 # test_data_for_stuff
-tbd
+
+## About the work
+
+### ExtractUtility
+In the original .NET architecture, the workflow acted as a bridge between the raw database schema and the client-facing report schema. The process looked exactly like this:
+
+1. The .NET console app executed a raw SQL query from a .sql file inside config/SQ** against the database server.
+
+2. The database returned a standard data reader dataset, which often contained internal system column names or database-specific naming conventions.
+
+3. The app looped through that dataset. For every row, it looked strictly at the ordered Column elements inside the Extra**.xml file. It pulled data from the matching database fields, applied the data formatting transformations, and outputted the clean row using the exact user-friendly column names specified in the XML configuration (ColNm="...").
+
+
+## 🧬 Local Parity Demonstration & Validation
+
+The platform includes a localized CLI execution loop that allows developers to run end-to-end report extractions on a local machine or within an Ubuntu WSL environment. This allows you to verify data parity byte-for-byte against legacy systems without needing an active database connection.
+
+### 🏃‍♂️ Running the Local Pipeline Engine
+
+1. **Prepare Your Local Source Assets:** Ensure you have an extraction mapping template configured under your configuration directory (`config/Extrac/AND.xml`) and a raw test file located at `data/raw_input.csv`.
+
+2. **Execute the Transformation Pipeline:** Run the local orchestrator by passing the input file, the template mapping schema, and your target output destination path as arguments:
+   ```bash
+   python run_local.py \
+     --input data/raw_input.csv \
+     --template config/Extrac/NDER_.xml \
+     --output data/processed_output.csv
+
+
+### Architectural Service Core Overview
+
+The transformation engine inside this repository is a direct port of the legacy .NET Framework 4.7 compilation utility (ExtractUtility.exe). It migration moves the platform toward a decoupled, service-oriented architecture.
+
+🔄 Legacy Architecture vs. Modern Python Platform
+Legacy .NET Pattern (ExtractUtility.exe): Tightly bound command-line invocation parsing, database cursor loop structures (SqlDataReader), and XML configuration string matches together inside a single application runtime.
+
+Modern Python Service Pattern: Completely uncouples the engine components into isolated, reusable modules using an Adapter Design Pattern.
+
+```txt
+                           ┌─────────────────────────┐
+                           │   Legacy XML Template   │
+                           └────────────┬────────────┘
+                                        │
+                                        ▼
+┌──────────────────┐       ┌─────────────────────────┐       ┌──────────────────────┐
+│  Raw Data Source │ ───>  │     MappingService      │ ───>  │ Standardized Outbound│
+│  (Local or API)  │       │ (Pure Business Logic)   │       │   Reporting File     │
+└──────────────────┘       └─────────────────────────┘       └──────────────────────┘
+```
+
+Key Architectural Components
+1. app/core/config.py & logging.py: Strongly-typed settings management (via Pydantic) and multi-sink execution logs that protect credentials and track pipeline anomalies.
+
+2. app/services/xml_adapter.py (XMLConfigAdapter): Parses the metadata layer (ExtractType, DateFormat, column positions) from legacy XML configurations and builds an internal ReportSchema. This allows you to easily drop the XML logic in Phase 2 and switch to a database or JSON configuration without breaking the application.
+
+3. app/services/mapping.py (MappingService): The core business engine. It streams large files in low-memory chunks to keep cloud footprints small, strips dirty whitespace, standardizes datetimes to match reporting export constraints, and applies explicit field quoting rules.
 
 ```bash
+
+
 [project]
 name = "gco-fenx-reporting-platform"
 version = "0.1.0"
