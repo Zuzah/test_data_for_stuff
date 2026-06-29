@@ -100,7 +100,7 @@ if __name__ == "__main__":
 
 app/core/logging.py
 
-'''python
+```python
 import sys
 from pathlib import Path
 from loguru import logger
@@ -142,7 +142,7 @@ def configure_logging():
 # Globally instantiate configured multi-sink execution logger
 log = configure_logging()
 
-'''
+```
 
 test_logging.py
 
