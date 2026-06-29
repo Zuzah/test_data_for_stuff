@@ -186,27 +186,32 @@ if __name__ == "__main__":
 app/services/xml_adapter.py
 
 ```python
-import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Dict
 from app.core.logging import log
 
 @dataclass
+class ColumnDefinition:
+    """Tracks field metadata required for downstream database type mapping transformations."""
+    name: str
+    data_type: str  # e.g., "String", "DateTime", "Numeric"
+    assignment_order: int
+
+@dataclass
 class ReportSchema:
-    """Unified internal data configuration model protecting the application from breaking changes."""
+    """Unified configuration map driving the transformation engine rules."""
     extract_type: str = "CSV"
     date_format: str = "M/d/yyyy h:mm:ss tt"
     max_retry: int = 3
-    target_columns: List[str] = field(default_factory=list)
+    columns: List[ColumnDefinition] = field(default_factory=list)
 
 class XMLConfigAdapter:
-    """Translates legacy XML layout parameters into the unified ReportSchema."""
+    """Transforms legacy bank XML layout schemas into unified internal ReportSchema objects."""
     
     @staticmethod
     def parse_template(xml_path: Path) -> ReportSchema:
-        """Opens, reads, and extracts structural configuration tokens from legacy XML files."""
         log.info(f"Parsing configuration template file from path: {xml_path}")
         
         if not xml_path.exists():
@@ -216,39 +221,45 @@ class XMLConfigAdapter:
             tree = ET.parse(xml_path)
             root = tree.getroot()
             
-            # 1. Fetch top-level configuration metadata attributes
+            # 1. Fetch top-level orchestration metadata
             extract_type = root.get("ExtractType", "CSV")
             date_format = root.get("DateFormat", "M/d/yyyy h:mm:ss tt")
             max_retry = int(root.get("MaxRetry", "3"))
             
-            # 2. Extract column data layouts utilizing safe regex mapping rules
-            target_columns = []
+            raw_columns: List[ColumnDefinition] = []
             
-            # Convert the raw XML segment back to a string to scan for token attributes cleanly
-            raw_xml_str = ET.tostring(root, encoding="utf-8").decode("utf-8")
+            # 2. Navigate nodes safely via structural tags instead of brittle text matching
+            for col_node in root.findall(".//Column"):
+                col_name = col_node.get("ColNm")
+                data_type = col_node.get("DataType", "String")
+                assignment_str = col_node.get("Assignment")
+                
+                if col_name and assignment_str:
+                    raw_columns.append(
+                        ColumnDefinition(
+                            name=col_name.strip(),
+                            data_type=data_type.strip(),
+                            assignment_order=int(assignment_str.strip())
+                        )
+                    )
             
-            # Match strings trapped specifically inside ColNm="..." attributes
-            column_matches = re.findall(r'ColNm="([^"]+)"', raw_xml_str)
+            # 3. Enforce deterministic structural sequence based on original Assignment arrays
+            sorted_columns = sorted(raw_columns, key=lambda c: c.assignment_order)
             
-            for col in column_matches:
-                trimmed_col = col.strip()
-                if trimmed_col and trimmed_col not in target_columns:
-                    target_columns.append(trimmed_col)
-                    
-            log.info(f"Successfully compiled execution mapping layer. Captured {len(target_columns)} distinct column headers.")
+            log.info(f"Successfully compiled execution mapping layer. Captured {len(sorted_columns)} sorted target columns.")
             
             return ReportSchema(
                 extract_type=extract_type,
                 date_format=date_format,
                 max_retry=max_retry,
-                target_columns=target_columns
+                columns=sorted_columns
             )
             
         except ET.ParseError as e:
             log.error(f"Malformed XML syntax encountered during parsing: {str(e)}")
             raise
         except Exception as e:
-            log.error(f"Unexpected operational failure compiling template layout structural sets: {str(e)}")
+            log.error(f"Unexpected operational failure compiling template layout: {str(e)}")
             raise
 ```
 
@@ -277,37 +288,38 @@ from app.services.xml_adapter import XMLConfigAdapter
 
 def verify_xml_adapter_pipeline():
     print("==================================================")
-    print("RUNNING DAY TEMPLATE ADAPTER VALIDATION")
+    print("🧬 RUNNING METADATA ADAPTER VALIDATION")
     print("==================================================")
     
-    # Target the newly created validation layout
     target_xml = settings.template_path / "CANDER_Report_ExtractTemplate.xml"
     
     try:
-        # Run execution pass through adapter context layer
         schema = XMLConfigAdapter.parse_template(target_xml)
         
         print("\n--------------------------------------------------")
-        print("COMPILING VERIFICATION ASSERTIONS:")
+        print("🔎 COMPILING METADATA ASSERTIONS:")
         print(f"File Type Asserted:     {schema.extract_type} (Expected: CSV)")
-        print(f"Date Template Asserted: {schema.date_format} (Expected: M/d/yyyy h:mm:ss tt)")
         print(f"Max Retries Bound:      {schema.max_retry} (Expected: 5)")
-        print(f"Extracted Total Columns: {len(schema.target_columns)} (Expected: 5)")
-        print(f"Mapped Core Columns:    {schema.target_columns}")
+        print(f"Extracted Total Columns: {len(schema.columns)} (Expected: 5)")
+        
+        print("\n📋 COLUMN FORMAT DETAILS:")
+        for col in schema.columns:
+            print(f" -> Pos {col.assignment_order}: {col.name:25} | Type: {col.data_type}")
         print("--------------------------------------------------")
         
-        # Guardrail validity test checks
-        assert schema.extract_type == "CSV", "Extraction parsing divergence"
-        assert schema.max_retry == 5, "Retry boundary parsing divergence"
-        assert len(schema.target_columns) == 5, "Column sequence extraction discrepancy"
+        # Safe validations
+        assert schema.extract_type == "CSV"
+        assert len(schema.columns) == 5
+        assert schema.columns[0].name == "CLIENT_IDENTIFIER"
+        assert schema.columns[2].data_type == "DateTime"
         
         log.info("Parity Validation Metrics verified successfully.")
         print("==================================================")
-        print("TEMPLATE PARSING STATUS: SUCCESS (NO BUGS)")
+        print("✅ METADATA ADAPTER SETUP: NO BUGS")
         print("==================================================")
         
     except Exception as e:
-        print(f"PIPELINE FAILURE: {str(e)}")
+        print(f"❌ PIPELINE FAILURE: {str(e)}")
         print("==================================================")
 
 if __name__ == "__main__":
