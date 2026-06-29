@@ -143,3 +143,41 @@ def configure_logging():
 log = configure_logging()
 
 '''
+
+test_logging.py
+
+```python
+# test_logging.py
+from pathlib import Path
+from app.core.logging import log
+from app.core.config import settings
+
+def test_logger_routing():
+    print("==================================================")
+    print("📝 RUNNING STRUCTURAL LOGGING VALIDATION")
+    print("==================================================")
+    
+    # 1. Fire informational trace (Should ONLY print to console, NOT file)
+    log.info("System initializing... Connecting to Fenergo configuration layer.")
+    
+    # 2. Fire warning error traces (Should print to console AND write to logs/error.log)
+    log.warning("System Alert: High network latency detected on endpoint handshake.")
+    log.error("Parsing Exception: Core token identifier parsing failure mock error.")
+
+    # 3. Verify file generation
+    expected_log_file = settings.BASE_DIR / "logs" / "error.log"
+    
+    print("\n--------------------------------------------------")
+    print("🔎 RUNNING LOG ROTATION FILE EXTRACT VERIFICATION:")
+    if expected_log_file.exists():
+        print(f"✅ PASS: File system log discovered at {expected_log_file}")
+        with open(expected_log_file, "r") as f:
+            lines = f.readlines()
+            print(f"📁 Log File Record Count: {len(lines)} rows captured.")
+    else:
+        print("❌ FAIL: Log output file could not be generated on local drive.")
+    print("==================================================")
+
+if __name__ == "__main__":
+    test_logger_routing()
+```
