@@ -97,3 +97,49 @@ def test_environment_loading():
 if __name__ == "__main__":
     test_environment_loading()
 ```
+
+app/core/logging.py
+
+'''python
+import sys
+from pathlib import Path
+from loguru import logger
+from app.core.config import settings
+
+def configure_logging():
+    """
+    Initializes a production-grade multi-target logging structure.
+    Sinks informational tracks to Console (stdout) and system anomalies to an error log file.
+    """
+    # 1. Clear any default standard library logger configurations
+    logger.remove()
+
+    # 2. Add standard Console stdout handler for operational info tracking
+    logger.add(
+        sys.stdout,
+        level="INFO",
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level:7}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        colorize=True
+    )
+
+    # 3. Securely determine localized logs subdirectory within system base path
+    log_dir = settings.BASE_DIR / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    error_log_path = log_dir / "error.log"
+
+    # 4. Bind file-system sink tracking exceptions and errors exclusively
+    logger.add(
+        str(error_log_path),
+        level="WARNING",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level:7} | {name}:{function}:{line} - {message}",
+        rotation="10 MB",      # Prevents files from growing infinitely
+        retention="30 days",   # Automatically purges stale server records
+        compression="zip"      # Compresses historic tracking sets to optimize disk space
+    )
+
+    return logger
+
+# Globally instantiate configured multi-sink execution logger
+log = configure_logging()
+
+'''
