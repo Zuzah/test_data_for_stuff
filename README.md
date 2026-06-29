@@ -332,12 +332,10 @@ app/services/mapping.py
 
 ```python
 import os
-import csv
 from pathlib import Path
-from datetime import datetime
 import pandas as pd
 from app.core.logging import log
-from app.services.xml_adapter import ReportSchema, ColumnDefinition
+from app.services.xml_adapter import ReportSchema
 
 class MappingService:
     """Core business logic engine performing schema-driven data transformations."""
@@ -354,7 +352,6 @@ class MappingService:
         # Handle Date Formatting Parity
         if data_type == "DateTime":
             try:
-                # Parse standard ISO or string dates and cast to custom Fenergo XML layout
                 parsed_date = pd.to_datetime(val_str)
                 return parsed_date.strftime("%-m/%-d/%Y %-I:%M:%S %p").lower()
             except Exception:
@@ -363,7 +360,6 @@ class MappingService:
 
         # Handle String Formatting Parity: Enforce double quotes around strings
         if data_type == "String":
-            # If it's already got quotes, don't double up
             if val_str.startswith('"') and val_str.endswith('"'):
                 return val_str
             return f'"{val_str}"'
@@ -372,8 +368,8 @@ class MappingService:
 
     def transform_file(self, input_path: Path, output_path: Path, schema: ReportSchema) -> None:
         """
-        Streams input files through chunked dataframes to optimize memory
-        while applying transformation rules.
+        Streams input files through chunked dataframes to optimize memory 
+        while manually generating row structures to guarantee quoting parity.
         """
         log.info(f"Initiating extraction transformation pipeline from: {input_path}")
         
@@ -383,27 +379,23 @@ class MappingService:
         # Ensure output directory exists
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        try:
-            # Open output file context for streaming delivery
-            # quoting=csv.QUOTE_NONE ensures our explicit manually calculated quotes are respected
-            with open(output_path, mode="w", encoding="utf-8", newline="") as out_file:
-                writer = csv.writer(out_file, delimiter=schema.extract_type == "CSV" and "," or ",")
-                
-                # Write matching header row sequence
-                headers = [col.name for col in schema.columns]
-                writer.writerow(headers)
+        # Determine structural delimiter matching configuration choices
+        delimiter = "," if schema.extract_type == "CSV" else ","
 
-                # Stream raw data in 5,000 row chunks to maintain a near-zero memory footprint
-                # This protects Phase 2 containers from running out of memory (OOM)
+        try:
+            # Write rows out as plain text lines to honor exact manual quoting rules
+            with open(output_path, mode="w", encoding="utf-8", newline="") as out_file:
+                # 1. Write headers
+                headers = [col.name for col in schema.columns]
+                out_file.write(delimiter.join(headers) + "\n")
+
+                # 2. Stream chunked inputs
                 for chunk in pd.read_csv(input_path, chunksize=5000, dtype=str):
-                    
                     for _, row in chunk.iterrows():
                         processed_row = []
                         
                         for col in schema.columns:
-                            # Pull value by column name if it exists in source, else default empty
                             raw_val = row.get(col.name, "")
-                            
                             formatted_val = self._format_value(
                                 value=raw_val,
                                 data_type=col.data_type,
@@ -411,14 +403,14 @@ class MappingService:
                             )
                             processed_row.append(formatted_val)
                             
-                        writer.writerow(processed_row)
+                        # Join elements cleanly with delimiter
+                        out_file.write(delimiter.join(processed_row) + "\n")
 
             log.info(f"Successfully processed and generated parity report at: {output_path}")
 
         except Exception as e:
             log.error(f"Critical execution exception encountered during data streaming: {str(e)}")
             
-            # --- Task 5.3: Fail-Safe Guardrail ---
             if output_path.exists():
                 log.warning(f"Scrubbing incomplete or corrupted file from drive: {output_path}")
                 os.remove(output_path)
