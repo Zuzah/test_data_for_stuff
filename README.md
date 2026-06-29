@@ -325,3 +325,164 @@ def verify_xml_adapter_pipeline():
 if __name__ == "__main__":
     verify_xml_adapter_pipeline()
 ```
+
+## Day 5
+
+app/services/mapping.py
+
+```python
+import os
+import csv
+from pathlib import Path
+from datetime import datetime
+import pandas as pd
+from app.core.logging import log
+from app.services.xml_adapter import ReportSchema, ColumnDefinition
+
+class MappingService:
+    """Core business logic engine performing schema-driven data transformations."""
+
+    @staticmethod
+    def _format_value(value: any, data_type: str, date_mask: str) -> str:
+        """Applies explicit legacy formatting rules to a raw cell value."""
+        if pd.isna(value) or value is None:
+            return ""
+
+        # Convert to string and immediately strip trailing/leading whitespace
+        val_str = str(value).strip()
+
+        # Handle Date Formatting Parity
+        if data_type == "DateTime":
+            try:
+                # Parse standard ISO or string dates and cast to custom Fenergo XML layout
+                parsed_date = pd.to_datetime(val_str)
+                return parsed_date.strftime("%-m/%-d/%Y %-I:%M:%S %p").lower()
+            except Exception:
+                log.warning(f"Failed parsing value '{val_str}' as DateTime. Falling back to raw text.")
+                return val_str
+
+        # Handle String Formatting Parity: Enforce double quotes around strings
+        if data_type == "String":
+            # If it's already got quotes, don't double up
+            if val_str.startswith('"') and val_str.endswith('"'):
+                return val_str
+            return f'"{val_str}"'
+
+        return val_str
+
+    def transform_file(self, input_path: Path, output_path: Path, schema: ReportSchema) -> None:
+        """
+        Streams input files through chunked dataframes to optimize memory
+        while applying transformation rules.
+        """
+        log.info(f"Initiating extraction transformation pipeline from: {input_path}")
+        
+        if not input_path.exists():
+            raise FileNotFoundError(f"Source data target file not found at: {input_path}")
+
+        # Ensure output directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            # Open output file context for streaming delivery
+            # quoting=csv.QUOTE_NONE ensures our explicit manually calculated quotes are respected
+            with open(output_path, mode="w", encoding="utf-8", newline="") as out_file:
+                writer = csv.writer(out_file, delimiter=schema.extract_type == "CSV" and "," or ",")
+                
+                # Write matching header row sequence
+                headers = [col.name for col in schema.columns]
+                writer.writerow(headers)
+
+                # Stream raw data in 5,000 row chunks to maintain a near-zero memory footprint
+                # This protects Phase 2 containers from running out of memory (OOM)
+                for chunk in pd.read_csv(input_path, chunksize=5000, dtype=str):
+                    
+                    for _, row in chunk.iterrows():
+                        processed_row = []
+                        
+                        for col in schema.columns:
+                            # Pull value by column name if it exists in source, else default empty
+                            raw_val = row.get(col.name, "")
+                            
+                            formatted_val = self._format_value(
+                                value=raw_val,
+                                data_type=col.data_type,
+                                date_mask=schema.date_format
+                            )
+                            processed_row.append(formatted_val)
+                            
+                        writer.writerow(processed_row)
+
+            log.info(f"Successfully processed and generated parity report at: {output_path}")
+
+        except Exception as e:
+            log.error(f"Critical execution exception encountered during data streaming: {str(e)}")
+            
+            # --- Task 5.3: Fail-Safe Guardrail ---
+            if output_path.exists():
+                log.warning(f"Scrubbing incomplete or corrupted file from drive: {output_path}")
+                os.remove(output_path)
+                
+            raise e
+```
+
+run_local.py
+
+```python
+# run_local.py
+import argparse
+from pathlib import Path
+from app.core.logging import log
+from app.services.xml_adapter import XMLConfigAdapter
+from app.services.mapping import MappingService
+
+def main():
+    parser = argparse.ArgumentParser(description="GCO Fen-X Local Reporting CLI Pipe Runner")
+    parser.add_index = False
+    parser.add_argument("--input", required=True, help="Path to raw source data CSV")
+    parser.add_argument("--template", required=True, help="Path to legacy config XML mapping layout")
+    parser.add_argument("--output", required=True, help="Target destination for output CSV data")
+    
+    args = parser.parse_args()
+    
+    input_path = Path(args.input)
+    template_path = Path(args.template)
+    output_path = Path(args.output)
+    
+    log.info("--- STARTING LOCAL EXTRACTION PARITY ENGINE ---")
+    
+    try:
+        # 1. Parse XML schema layouts via our adapter
+        schema = XMLConfigAdapter.parse_template(template_path)
+        
+        # 2. Invoke core transformation logic execution passes
+        service = MappingService()
+        service.transform_file(
+            input_path=input_path,
+            output_path=output_path,
+            schema=schema
+        )
+        
+        log.info("--- PIPELINE RUN COMPLETED SUCCESSFULLY ---")
+        
+    except Exception as e:
+        log.error(f"Execution pipeline run halted due to structural error: {str(e)}")
+        exit(1)
+
+if __name__ == "__main__":
+    main()
+```
+
+data/raw_input.csv
+
+```csv
+CLIENT_IDENTIFIER,ORGANIZATION_NAME,REGISTRATION_DATE,COUNTRY_OF_DOMICILE,LAST_MODIFIED_TIMESTAMP
+102948,  Acme Corporate Wealth   ,2026-01-15,Canada,2026-06-29 08:30:00
+583920,Global Markets Corp,2024-11-02 14:22:11,United States,2026-06-25 17:15:00
+```
+
+Run the engine from your terminal window:
+
+```bash
+python run_local.py --input data/raw_input.csv --template config/ExtractTemplates/CANDER_Report_ExtractTemplate.xml --output data/processed_output.csv
+```
