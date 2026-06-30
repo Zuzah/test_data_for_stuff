@@ -695,3 +695,20 @@ class Settings(BaseSettings):
 settings = Settings()
 
 ```
+
+update your bashrc:
+
+```bash
+export http_proxy=$(netsh.exe winhttp show proxy | grep 'Proxy Server' | awk '{print $3}')
+export https_proxy=$http_proxy
+```
+
+and .env:
+```
+# --- NETWORK & PROXY INTEGRATION STRUCTURES ---
+HTTPX_VERIFY_SSL=False
+
+# Replace with your actual office corporate proxy if the network requires explicit routing:
+CORPORATE_HTTP_PROXY=http://10.0.0.1:8080
+```
+
