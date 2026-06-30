@@ -559,7 +559,7 @@ app/services/fenergo_client.py
 
 ```python
 import time
-from typing import Optional
+from typing import Optional, Dict
 import httpx
 from app.core.config import settings
 from app.core.logging import log
@@ -571,17 +571,24 @@ class FenergoAPIClient:
         self.base_url = settings.FENERGO_BASE_URL
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
+        
+        # Read proxy rules dynamically from environment configurations
+        # Fallback to standard true verification values if missing from settings properties
+        self.verify_ssl = getattr(settings, "HTTPX_VERIFY_SSL", True)
+        proxy_url = getattr(settings, "CORPORATE_HTTP_PROXY", None)
+        
+        self.mounts: Dict[str, httpx.AsyncBaseTransport] = {}
+        if proxy_url:
+            log.info(f"Configuring outbound corporate proxy routing transport: {proxy_url}")
+            self.mounts = {"all://": httpx.AsyncHTTPTransport(proxy=proxy_url)}
 
     async def _get_valid_token(self, client: httpx.AsyncClient) -> str:
-        """
-        Retrieves a valid OAuth2 Access Token using exact form payloads.
-        """
+        """Retrieves a valid OAuth2 Access Token using strict client credentials form mapping."""
         if self._token and time.time() < (self._token_expires_at - 30):
             return self._token
 
         log.info("OAuth2 token missing or expired. Fetching fresh credentials from Token Server...")
         
-        # Explicit payload dictionary
         payload = {
             "grant_type": "client_credentials",
             "scope": settings.FENERGO_SCOPE,
@@ -589,7 +596,6 @@ class FenergoAPIClient:
             "client_secret": settings.FENERGO_CLIENT_SECRET
         }
         
-        # Enforce exact headers matching standard enterprise Postman request engines
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
             "Accept": "application/json",
@@ -598,7 +604,6 @@ class FenergoAPIClient:
         }
 
         try:
-            # Force compliance by routing to the auth destination cleanly
             response = await client.post(
                 settings.FENERGO_TOKEN_URL, 
                 data=payload, 
@@ -627,8 +632,8 @@ class FenergoAPIClient:
         """Queries Fenergo Advanced Reporting API endpoints to fetch the download location."""
         log.info(f"Querying Fenergo metadata registry for Report ID: {report_id}")
         
-        # Enforce verify=False inside WSL to bypass local corporate proxy certificate checks
-        async with httpx.AsyncClient(verify=False) as client:
+        # Instantiate client mounting the custom proxy engines and dynamic verification layers
+        async with httpx.AsyncClient(verify=self.verify_ssl, mounts=self.mounts) as client:
             token = await self._get_valid_token(client)
             headers = {
                 "Authorization": f"Bearer {token}",
