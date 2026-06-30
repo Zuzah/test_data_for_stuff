@@ -572,7 +572,6 @@ class FenergoAPIClient:
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
         
-        # Pull configuration dynamically from validated environment settings
         self.verify_ssl = settings.HTTPX_VERIFY_SSL
         self.proxy_url = settings.CORPORATE_HTTP_PROXY
         
@@ -602,29 +601,34 @@ class FenergoAPIClient:
             "Cache-Control": "no-cache"
         }
 
-        # Notice we use the client passed from the outer block which carries the correct proxy/SSL config
-        response = await client.post(
-            settings.FENERGO_TOKEN_URL, 
-            data=payload, 
-            headers=headers,
-            timeout=15.0
-        )
-        
-        response.raise_for_status()
-        data = response.json()
-        
-        self._token = data["access_token"]
-        expires_in = data.get("expires_in", 3600)
-        self._token_expires_at = time.time() + expires_in
-        
-        log.info("OAuth2 Client Credentials authentication handshake verified successfully.")
-        return self._token
+        try:
+            response = await client.post(
+                settings.FENERGO_TOKEN_URL, 
+                data=payload, 
+                headers=headers,
+                timeout=15.0
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            self._token = data["access_token"]
+            expires_in = data.get("expires_in", 3600)
+            self._token_expires_at = time.time() + expires_in
+            
+            log.info("OAuth2 Client Credentials authentication handshake verified successfully.")
+            return self._token
+
+        except httpx.HTTPStatusError as e:
+            log.error(f"Fenergo Auth Handshake Rejected [{e.response.status_code}]: {e.response.text}")
+            raise
+        except Exception as e:
+            log.error(f"Failed to complete OAuth2 authentication sequence: {str(e)}")
+            raise
 
     async def fetch_presigned_report_url(self, report_id: str) -> str:
         """Queries Fenergo Advanced Reporting API endpoints to fetch the download location."""
         log.info(f"Querying Fenergo metadata registry for Report ID: {report_id}")
         
-        # CRITICAL FIX: Ensure the SSL validation and proxy settings apply to the authorization request too
         async with httpx.AsyncClient(verify=self.verify_ssl, mounts=self.mounts) as client:
             token = await self._get_valid_token(client)
             headers = {
