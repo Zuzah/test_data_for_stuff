@@ -701,6 +701,9 @@ update your bashrc:
 ```bash
 export http_proxy=$(netsh.exe winhttp show proxy | grep 'Proxy Server' | awk '{print $3}')
 export https_proxy=$http_proxy
+export WIN_HOST_IP=$(ip route | grep default | awk '{print $3}')
+export http_proxy=http://$WIN_HOST_IP:9000
+export https_proxy=http://$WIN_HOST_IP:9000
 ```
 
 and .env:
