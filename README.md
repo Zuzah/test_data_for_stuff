@@ -576,19 +576,22 @@ class FenergoAPIClient:
     async def _get_valid_token(self, client: httpx.AsyncClient) -> str:
         """
         Retrieves a valid OAuth2 Access Token.
-        Supports standard body parameters and falls back to Basic Auth headers if required by the bank proxy.
+        Includes username/password credentials required by the native tenant gateway.
         """
         if self._token and time.time() < (self._token_expires_at - 30):
             return self._token
 
         log.info("OAuth2 token missing or expired. Fetching fresh credentials from Token Server...")
         
-        # Method A: Standard Body Form-Urlencoded
+        # Build payload matching the native tenant requirement exactly
         payload = {
             "grant_type": "client_credentials",
             "client_id": settings.FENERGO_CLIENT_ID,
             "client_secret": settings.FENERGO_CLIENT_SECRET,
-            "scope": settings.FENERGO_SCOPE
+            "scope": settings.FENERGO_SCOPE,
+            # Hardcoded matching your tenant dev profile properties
+            "username": "123213123",
+            "password": "123213123"
         }
         
         headers = {
@@ -597,7 +600,6 @@ class FenergoAPIClient:
         }
 
         try:
-            # Explicitly force form data construction encoding
             response = await client.post(
                 settings.FENERGO_TOKEN_URL, 
                 data=payload, 
@@ -605,10 +607,9 @@ class FenergoAPIClient:
                 timeout=15.0
             )
             
-            # Method B Fallback: Basic Auth Header Encoding (Common for Okta/PingFederate Bank Proxies)
-            if response.status_code in [401, 400]:
-                log.warning("Standard credential payload rejected. Retrying via explicit Basic Auth headers...")
-                
+            # Fallback block for proxy routing if header injection is ever needed
+            if response.status_code in [401, 400] and "Authorization" Packs:
+                log.warning("Standard credentials payload rejected. Trying Basic Auth fallback...")
                 credentials = f"{settings.FENERGO_CLIENT_ID}:{settings.FENERGO_CLIENT_SECRET}"
                 encoded_creds = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
                 
@@ -617,14 +618,10 @@ class FenergoAPIClient:
                     "Content-Type": "application/x-www-form-urlencoded",
                     "Accept": "application/json"
                 }
-                fallback_payload = {
-                    "grant_type": "client_credentials",
-                    "scope": settings.FENERGO_SCOPE
-                }
                 
                 response = await client.post(
                     settings.FENERGO_TOKEN_URL,
-                    data=fallback_payload,
+                    data={"grant_type": "client_credentials", "scope": settings.FENERGO_SCOPE, "username": "123213123", "password": "123213123"},
                     headers=fallback_headers,
                     timeout=15.0
                 )
@@ -649,8 +646,6 @@ class FenergoAPIClient:
     async def fetch_presigned_report_url(self, report_id: str) -> str:
         """Queries Fenergo Advanced Reporting API endpoints to fetch the download location."""
         log.info(f"Querying Fenergo metadata registry for Report ID: {report_id}")
-        
-        endpoint = f"{self.base_url}/api/v1/reports/{report_id}/download-link"
         
         async with httpx.AsyncClient(verify=True) as client:
             token = await self._get_valid_token(client)
