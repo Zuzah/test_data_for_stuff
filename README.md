@@ -572,15 +572,14 @@ class FenergoAPIClient:
         self._token: Optional[str] = None
         self._token_expires_at: float = 0.0
         
-        # Read proxy rules dynamically from environment configurations
-        # Fallback to standard true verification values if missing from settings properties
-        self.verify_ssl = getattr(settings, "HTTPX_VERIFY_SSL", True)
-        proxy_url = getattr(settings, "CORPORATE_HTTP_PROXY", None)
+        # Pull configuration dynamically from validated environment settings
+        self.verify_ssl = settings.HTTPX_VERIFY_SSL
+        self.proxy_url = settings.CORPORATE_HTTP_PROXY
         
         self.mounts: Dict[str, httpx.AsyncBaseTransport] = {}
-        if proxy_url:
-            log.info(f"Configuring outbound corporate proxy routing transport: {proxy_url}")
-            self.mounts = {"all://": httpx.AsyncHTTPTransport(proxy=proxy_url)}
+        if self.proxy_url:
+            log.info(f"Configuring outbound corporate proxy routing transport: {self.proxy_url}")
+            self.mounts = {"all://": httpx.AsyncHTTPTransport(proxy=self.proxy_url)}
 
     async def _get_valid_token(self, client: httpx.AsyncClient) -> str:
         """Retrieves a valid OAuth2 Access Token using strict client credentials form mapping."""
@@ -603,36 +602,29 @@ class FenergoAPIClient:
             "Cache-Control": "no-cache"
         }
 
-        try:
-            response = await client.post(
-                settings.FENERGO_TOKEN_URL, 
-                data=payload, 
-                headers=headers,
-                timeout=15.0
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            self._token = data["access_token"]
-            expires_in = data.get("expires_in", 3600)
-            self._token_expires_at = time.time() + expires_in
-            
-            log.info("OAuth2 Client Credentials authentication handshake verified successfully.")
-            return self._token
-
-        except httpx.HTTPStatusError as e:
-            log.error(f"Fenergo Auth Handshake Rejected [{e.response.status_code}]: {e.response.text}")
-            raise
-        except Exception as e:
-            log.error(f"Failed to complete OAuth2 authentication sequence: {str(e)}")
-            raise
+        # Notice we use the client passed from the outer block which carries the correct proxy/SSL config
+        response = await client.post(
+            settings.FENERGO_TOKEN_URL, 
+            data=payload, 
+            headers=headers,
+            timeout=15.0
+        )
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        self._token = data["access_token"]
+        expires_in = data.get("expires_in", 3600)
+        self._token_expires_at = time.time() + expires_in
+        
+        log.info("OAuth2 Client Credentials authentication handshake verified successfully.")
+        return self._token
 
     async def fetch_presigned_report_url(self, report_id: str) -> str:
         """Queries Fenergo Advanced Reporting API endpoints to fetch the download location."""
         log.info(f"Querying Fenergo metadata registry for Report ID: {report_id}")
         
-        # Instantiate client mounting the custom proxy engines and dynamic verification layers
+        # CRITICAL FIX: Ensure the SSL validation and proxy settings apply to the authorization request too
         async with httpx.AsyncClient(verify=self.verify_ssl, mounts=self.mounts) as client:
             token = await self._get_valid_token(client)
             headers = {
@@ -650,4 +642,32 @@ test_client.py
 ```python
 
     asyncio.run(run_client_validation())
+```
+
+new config.py:
+
+
+```python
+from typing import Optional
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # ... your existing configuration fields ...
+    FENERGO_BASE_URL: str
+    FENERGO_CLIENT_ID: str
+    FENERGO_CLIENT_SECRET: str
+    FENERGO_TOKEN_URL: str
+    FENERGO_SCOPE: str
+
+    # Add these lines to parse the network overrides cleanly
+    HTTPX_VERIFY_SSL: bool = True
+    CORPORATE_HTTP_PROXY: Optional[str] = None
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
+
+settings = Settings()
+py
+
 ```
