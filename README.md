@@ -648,26 +648,50 @@ new config.py:
 
 
 ```python
+import os
+from pathlib import Path
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
-    # ... your existing configuration fields ...
+    # App Environment Routing Mappings
+    DATABASE_URL: str = "sqlite:///./reporting_platform.db"
+
+    # --- Bank Enterprise Authentication Mapping (No Defaults - Safely Injected) ---
     FENERGO_BASE_URL: str
     FENERGO_CLIENT_ID: str
     FENERGO_CLIENT_SECRET: str
     FENERGO_TOKEN_URL: str
     FENERGO_SCOPE: str
 
-    # Add these lines to parse the network overrides cleanly
+    # Legacy Fallback Configuration Parameters
+    DEFAULT_DELIMITER: str = ","
+    DEFAULT_DATE_FORMAT: str = "M/d/yyyy h:mm:ss tt"
+
+    # Cross-Platform Path Tracking Helpers
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent.parent
+
+    # For parsing network overrides cleanly
     HTTPX_VERIFY_SSL: bool = True
     CORPORATE_HTTP_PROXY: Optional[str] = None
 
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+    @property
+    def template_path(self) -> Path:
+        """Mimics legacy .NET BaseDirectory + Constants.TemplatePath lookup"""
+        return self.BASE_DIR / "config" / "ExtractTemplates"
+
+    @property
+    def sql_query_path(self) -> Path:
+        """Mimics legacy .NET BaseDirectory + Constants.SqlQueryPath lookup"""
+        return self.BASE_DIR / "config" / "SQLQueries"
+
+    # Read seamlessly from local system environment or uncommitted .env files
+    model_config = SettingsConfigDict(
+        env_file=os.path.join(Path(__file__).resolve().parent.parent.parent, ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore"
+    )
 
 settings = Settings()
-py
 
 ```
