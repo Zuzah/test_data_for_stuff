@@ -559,7 +559,6 @@ app/services/fenergo_client.py
 
 ```python
 import time
-import base64
 from typing import Optional
 import httpx
 from app.core.config import settings
@@ -589,7 +588,6 @@ class FenergoAPIClient:
             "client_id": settings.FENERGO_CLIENT_ID,
             "client_secret": settings.FENERGO_CLIENT_SECRET,
             "scope": settings.FENERGO_SCOPE,
-            # Hardcoded matching your tenant dev profile properties
             "username": "123213123",
             "password": "123213123"
         }
@@ -607,25 +605,6 @@ class FenergoAPIClient:
                 timeout=15.0
             )
             
-            # Fallback block for proxy routing if header injection is ever needed
-            if response.status_code in [401, 400] and "Authorization" Packs:
-                log.warning("Standard credentials payload rejected. Trying Basic Auth fallback...")
-                credentials = f"{settings.FENERGO_CLIENT_ID}:{settings.FENERGO_CLIENT_SECRET}"
-                encoded_creds = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
-                
-                fallback_headers = {
-                    "Authorization": f"Basic {encoded_creds}",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                    "Accept": "application/json"
-                }
-                
-                response = await client.post(
-                    settings.FENERGO_TOKEN_URL,
-                    data={"grant_type": "client_credentials", "scope": settings.FENERGO_SCOPE, "username": "123213123", "password": "123213123"},
-                    headers=fallback_headers,
-                    timeout=15.0
-                )
-
             response.raise_for_status()
             data = response.json()
             
