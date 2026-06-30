@@ -574,22 +574,19 @@ class FenergoAPIClient:
 
     async def _get_valid_token(self, client: httpx.AsyncClient) -> str:
         """
-        Retrieves a valid OAuth2 Access Token.
-        Includes username/password credentials required by the native tenant gateway.
+        Retrieves a valid OAuth2 Access Token using strict client credentials form mapping.
         """
         if self._token and time.time() < (self._token_expires_at - 30):
             return self._token
 
         log.info("OAuth2 token missing or expired. Fetching fresh credentials from Token Server...")
         
-        # Build payload matching the native tenant requirement exactly
+        # Exact matching keys checked in bns-sdlc-dev Postman collection
         payload = {
             "grant_type": "client_credentials",
-            "client_id": settings.FENERGO_CLIENT_ID,
-            "client_secret": settings.FENERGO_CLIENT_SECRET,
             "scope": settings.FENERGO_SCOPE,
-            "username": "123213123",
-            "password": "123213123"
+            "client_id": settings.FENERGO_CLIENT_ID,
+            "client_secret": settings.FENERGO_CLIENT_SECRET
         }
         
         headers = {
