@@ -712,3 +712,6 @@ HTTPX_VERIFY_SSL=False
 CORPORATE_HTTP_PROXY=http://10.0.0.1:8080
 ```
 
+check powershell:
+Get-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' | Select-Object ProxyServer, ProxyEnable, AutoConfigURL
+
